@@ -2,7 +2,7 @@
 
 `sesame-motor-tester.ino` targets a classic ESP32 development board (including
 HW-394 / ESP-32D) with a PCA9685, rather than servos connected directly to GPIO.
-The main robot firmware is unchanged and still uses direct GPIO servo control.
+The main robot firmware also uses the same PCA9685 channel mapping and pulse limits.
 
 ## Wiring
 

@@ -3,7 +3,7 @@
 #include <DNSServer.h>
 #include <ESPmDNS.h>
 #include <Wire.h>
-#include <ESP32Servo.h>
+#include <Adafruit_PWMServoDriver.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include "face-bitmaps.h"
@@ -27,18 +27,9 @@
 #define OLED_RESET -1
 #define OLED_I2C_ADDR 0x3C
 
-// I2C Pins for Distro Board V2 / V3
-//#define I2C_SDA 8
-//#define I2C_SCL 9
-
-// I2C Pins for Distro Board V1
-//#define I2C_SDA 21
-//#define I2C_SCL 22
-
-// I2C Pins for S2 Mini Board
-#define I2C_SDA 33
-#define I2C_SCL 35
-
+// Classic ESP32 (HW-394 / ESP-32D): OLED and PCA9685 share this bus.
+#define I2C_SDA 21
+#define I2C_SCL 22
 
 // DNS Server for Captive Portal
 DNSServer dnsServer;
@@ -91,23 +82,15 @@ bool wifiRestoreApOnly = false;      // drop the station iface again after an AP
 const uint32_t WIFI_CONNECT_TIMEOUT_MS = 15000;
 const uint32_t WIFI_SETUP_START_DELAY_MS = 300;  // let the HTTP response flush before the AP channel may hop
 
-// Servo Pins for Distro Board
-// ======================================================================
-// Pin numbers are coorisponding to the ESP32 GPIO pins and may differ based on which board you use.
-// If you are using a different board, please adjust the servoPins array accordingly.
-// ======================================================================
-Servo servos[8];
-// Sesame Distro Board V3 Pinout [NEW]
-//const int servoPins[8] = {4, 5, 6, 7, 10, 11, 12, 13};
-
-// Sesame Distro Board V2 Pinout (Legacy)
-//const int servoPins[8] = {4, 5, 6, 7, 15, 16, 17, 18};
-
-// Sesame Distro Board V1 Pinout (Legacy)
-//const int servoPins[8] = {15, 2, 23, 19, 4, 16, 17, 18};
-
-// Lolin S2 Mini Pinout
-const int servoPins[8] = {1, 2, 4, 6, 8, 10, 13, 14};
+// PCA9685 servo output (channels, NOT ESP32 GPIO numbers).
+const uint8_t PCA9685_ADDRESS = 0x40;
+const uint16_t SERVO_FREQUENCY = 50;
+// Match the motor tester and movement-sequences.h: R1,R2,L1,L2,R4,R3,L3,L4.
+const uint8_t servoChannels[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+// Original Sesame limits in microseconds; verify your servos' travel unloaded.
+const int MIN_PULSE = 732;
+const int MAX_PULSE = 2929;
+Adafruit_PWMServoDriver pwm(PCA9685_ADDRESS);
 
 // Subtrim values for each servo (offset in degrees)
 int8_t servoSubtrim[8] = {0, 0, 0, 0, 0, 0, 0, 0};
@@ -655,8 +638,20 @@ void setup() {
   // I2C Init for ESP32
   Wire.begin(I2C_SDA, I2C_SCL);
 
+  // Initialize and disable every output before OLED/WiFi startup. Movement
+  // begins only when a servo command is issued after initialization.
+  if (!pwm.begin()) {
+    Serial.println(F("PCA9685 not found. Check wiring, VCC and address; reset to retry."));
+    while (true) delay(1000);
+  }
+  for (uint8_t channel = 0; channel < 16; channel++) {
+    pwm.setPWM(channel, 0, 4096); // Full OFF, including unused outputs
+  }
+  pwm.setPWMFreq(SERVO_FREQUENCY);
+  delay(10);
+
   // OLED Init
-  if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_I2C_ADDR)) {
+  if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_I2C_ADDR, true, false)) {
     Serial.println(F("SSD1306 allocation failed."));
     while (1);
   }
@@ -730,19 +725,6 @@ void setup() {
   
   server.begin();
 
-  // PWM Init
-  ESP32PWM::allocateTimer(0);
-  ESP32PWM::allocateTimer(1);
-  ESP32PWM::allocateTimer(2);
-  ESP32PWM::allocateTimer(3);
-  
-  for (int i = 0; i < 8; i++) {
-    servos[i].setPeriodHertz(50);
-    // Map 0-180 to approx 732-2929us
-    servos[i].attach(servoPins[i], 732, 2929);
-  }
-  delay(10);
-  
   // Show rest face on startup without moving motors
   setFace("rest");
   
@@ -1051,7 +1033,8 @@ void updateIdleBlink() {
 void setServoAngle(uint8_t channel, int angle) { 
   if (channel < 8) {
     int adjustedAngle = constrain(angle + servoSubtrim[channel], 0, 180);
-    servos[channel].write(adjustedAngle);
+    const int pulseUs = map(adjustedAngle, 0, 180, MIN_PULSE, MAX_PULSE);
+    pwm.writeMicroseconds(servoChannels[channel], pulseUs);
     delayWithFace(motorCurrentDelay);
   }
 }

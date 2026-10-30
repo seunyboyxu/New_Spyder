@@ -1,3 +1,8 @@
+> **This repository targets classic ESP32 + PCA9685.** For the HW-394 / ESP-32D
+> board, follow [ESP32 PCA9685 setup](ESP32-PCA9685.md). The legacy direct-GPIO
+> board pin tables and ESP32Servo instructions below describe upstream hardware
+> and do not apply to this adapted sketch.
+
 # Sesame Robot Firmware
 
 This document provides technical information on the firmware architecture, control logic, and hardware abstraction layers used in the Sesame Robot.
