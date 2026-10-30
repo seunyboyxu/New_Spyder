@@ -1,25 +1,32 @@
 #include <Arduino.h>
-#include <ESP32Servo.h>
+#include <Wire.h>
+#include <Adafruit_PWMServoDriver.h>
+
+// Arduino IDE: select ESP32 Dev Module; install Adafruit PWM Servo Driver Library
+// (and its Adafruit BusIO dependency). Serial Monitor: 115200 baud, Newline.
+// ESP32 GPIO21 -> SDA, GPIO22 -> SCL, 3V3 -> VCC, GND -> GND.
+// External regulated 5V (at least 3A) -> V+; share ground with the ESP32.
+// Do not power the servos from the ESP32's 3V3 pin or USB supply.
+// Keep servo horns off for initial calibration. `stop` removes PWM, not power.
 
 // ======================================================================
 // --- CONFIGURATION ---
 // ======================================================================
 
-Servo servos[8];
+const uint8_t I2C_SDA = 21;
+const uint8_t I2C_SCL = 22;
+const uint8_t PCA9685_ADDRESS = 0x40; // Default with address jumpers open
+const uint16_t SERVO_FREQUENCY = 50;
+Adafruit_PWMServoDriver pwm(PCA9685_ADDRESS);
+bool driverReady = false;
 
-// Motor Pin Mapping
-// Index: 0  1  2  3  4   5   6   7
-const int servoPins[8] = {1, 2, 4, 6, 8, 10, 13, 14};
-// Distro board V3 pins: (uncomment if needed)
-// const int servoPins[8] = {4, 5, 6, 7, 10, 11, 12, 13};
-// Distro board V2 pins: (uncomment if needed)
-// const int servoPins[8] = {4, 5, 6, 7, 15, 16, 17, 18};
-// Distro board V1 pins: (uncomment if needed)
-// const int servoPins[8] = {15, 2, 23, 19, 4, 16, 17, 18};
+// Motor ID -> PCA9685 channel (not ESP32 GPIO).
+// Order matches the main firmware: R1, R2, L1, L2, R4, R3, L3, L4.
+const uint8_t servoChannels[8] = {0, 1, 2, 3, 4, 5, 6, 7};
 
-
-
-// Pulse width settings
+// Original Sesame pulse limits, in microseconds. This is a wide range:
+// check your servo specifications and test with horns removed before using
+// endpoints. Adjust these values for your particular servos.
 const int MIN_PULSE = 732;
 const int MAX_PULSE = 2929;
 
@@ -37,17 +44,22 @@ void setup() {
   Serial.println("Commands:");
   Serial.println("1. id,angle   -> e.g. '0,90'");
   Serial.println("2. all,angle  -> e.g. 'all,90'");
-  Serial.println("3. stop       -> Detaches/Powers down motors");
+  Serial.println("3. stop       -> Disables PWM signals (servo power stays on)");
   Serial.println("-----------------------------------");
-  Serial.println("Status: Motors are currently OFF (Limp).");
+  Wire.begin(I2C_SDA, I2C_SCL);
+  if (!pwm.begin()) {
+    Serial.println("Error: PCA9685 not found. Check power, wiring and address; reset to retry.");
+    return;
+  }
 
-  // Allocate timers for ESP32Servo
-  ESP32PWM::allocateTimer(0);
-  ESP32PWM::allocateTimer(1);
-  ESP32PWM::allocateTimer(2);
-  ESP32PWM::allocateTimer(3);
-
-  // We do NOT attach motors here. They stay limp until a command is sent.
+  // Clear ALL outputs before accepting commands, including unused channels.
+  for (uint8_t channel = 0; channel < 16; channel++) {
+    pwm.setPWM(channel, 0, 4096); // PCA9685 full-OFF bit
+  }
+  pwm.setPWMFreq(SERVO_FREQUENCY);
+  delay(10);
+  driverReady = true;
+  Serial.println("Status: PWM outputs disabled; no movement until commanded.");
 }
 
 // ======================================================================
@@ -109,13 +121,14 @@ void moveMotor(int id, int angle) {
     return;
   }
 
-  // If servo isn't attached yet (powered off), attach it now
-  if (!servos[id].attached()) {
-    servos[id].setPeriodHertz(50);
-    servos[id].attach(servoPins[id], MIN_PULSE, MAX_PULSE);
+  if (!driverReady) {
+    Serial.println("Error: PCA9685 unavailable; check wiring and reset.");
+    return;
   }
 
-  servos[id].write(angle);
+  const int pulseUs = map(constrain(angle, 0, 180), 0, 180, MIN_PULSE, MAX_PULSE);
+  // Library converts microseconds using the configured PCA9685 frequency.
+  pwm.writeMicroseconds(servoChannels[id], pulseUs);
   
   Serial.print("OK: Motor ");
   Serial.print(id);
@@ -132,11 +145,12 @@ void moveAll(int angle) {
 }
 
 void stopMotors() {
-  Serial.println("Stopping (Detaching) all motors...");
-  for (int i = 0; i < 8; i++) {
-    if (servos[i].attached()) {
-      servos[i].detach();
-    }
+  if (!driverReady) {
+    Serial.println("Error: PCA9685 unavailable; check wiring and reset.");
+    return;
   }
-  Serial.println("Motors are now OFF.");
+  for (uint8_t channel = 0; channel < 16; channel++) {
+    pwm.setPWM(channel, 0, 4096);
+  }
+  Serial.println("PWM signals disabled. Servo power is still connected.");
 }
