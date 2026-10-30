@@ -87,9 +87,10 @@ const uint8_t PCA9685_ADDRESS = 0x40;
 const uint16_t SERVO_FREQUENCY = 50;
 // Match the motor tester and movement-sequences.h: R1,R2,L1,L2,R4,R3,L3,L4.
 const uint8_t servoChannels[8] = {0, 1, 2, 3, 4, 5, 6, 7};
-// Original Sesame limits in microseconds; verify your servos' travel unloaded.
-const int MIN_PULSE = 732;
-const int MAX_PULSE = 2929;
+// Initial positional-servo range in microseconds: 90 degrees = 1500us.
+// Verify actual travel with horns removed before running movement sequences.
+const int MIN_PULSE = 1000;
+const int MAX_PULSE = 2000;
 Adafruit_PWMServoDriver pwm(PCA9685_ADDRESS);
 
 // Subtrim values for each servo (offset in degrees)
