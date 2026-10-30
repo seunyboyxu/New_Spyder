@@ -41,9 +41,8 @@ Motor IDs 0–7 map to PCA9685 channels 0–7 respectively, in order:
 **R1, R2, L1, L2, R4, R3, L3, L4**. Plug signal wires into the signal row;
 check your board's markings for servo power and ground polarity.
 
-The sketch uses 50 Hz and an initial **1000–2000 microsecond** mapping,
-centred at **1500 microseconds** for 90 degrees, matching the main firmware.
-Actual angular travel varies by servo model. Check their specifications
+The sketch uses 50 Hz and retains upstream's **732–2929 microsecond** mapping.
+This is a wide range and may exceed your servos' limits. Check their specifications
 and adjust `MIN_PULSE` / `MAX_PULSE` before exploring endpoints. Start with one
 unloaded servo at 90 degrees. Do not mount horns until calibrated.
 

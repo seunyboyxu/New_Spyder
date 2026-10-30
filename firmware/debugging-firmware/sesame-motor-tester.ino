@@ -24,11 +24,11 @@ bool driverReady = false;
 // Order matches the main firmware: R1, R2, L1, L2, R4, R3, L3, L4.
 const uint8_t servoChannels[8] = {0, 1, 2, 3, 4, 5, 6, 7};
 
-// Initial positional-servo range in microseconds: 90 degrees = 1500us.
-// Match these values to the main firmware. Verify travel with horns removed;
-// adjust for your particular servos before attaching joints.
-const int MIN_PULSE = 1000;
-const int MAX_PULSE = 2000;
+// Original Sesame pulse limits, in microseconds. This is a wide range:
+// check your servo specifications and test with horns removed before using
+// endpoints. Adjust these values for your particular servos.
+const int MIN_PULSE = 732;
+const int MAX_PULSE = 2929;
 
 // ======================================================================
 // --- SETUP ---
